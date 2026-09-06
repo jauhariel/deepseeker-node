@@ -24,6 +24,24 @@ export function initDb() {
       token_id INTEGER,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT,
+      api_key TEXT UNIQUE,
+      created_at INTEGER,
+      active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER,
+      api_key TEXT,
+      endpoint TEXT,
+      model TEXT,
+      prompt_tokens INTEGER,
+      completion_tokens INTEGER,
+      cost REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_log(ts);
   `);
 }
 
@@ -96,6 +114,64 @@ export function deleteSessionsForChat(tokenId, sessionId) {
 // the next turn's parent is P + 2 (see the original project's note on this invariant).
 export function nextParent(parentMessageId) {
   return parentMessageId + 2;
+}
+
+// --- API keys ---------------------------------------------------------------
+
+export function addApiKey(label, apiKey) {
+  db.prepare('INSERT INTO api_keys (label, api_key, created_at, active) VALUES (?, ?, ?, 1)')
+    .run(label || null, apiKey, Math.floor(Date.now() / 1000));
+}
+
+export function listApiKeys() {
+  return db.prepare('SELECT id, label, api_key, created_at, active FROM api_keys ORDER BY id').all();
+}
+
+export function deleteApiKey(id) {
+  db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
+}
+
+export function isApiKeyValid(key) {
+  if (!key) return false;
+  return Boolean(db.prepare('SELECT 1 FROM api_keys WHERE api_key = ? AND active = 1').get(key));
+}
+
+// --- usage log ----------------------------------------------------------------
+
+export function logUsage({ apiKey, endpoint, model, promptTokens, completionTokens, cost }) {
+  db.prepare(`INSERT INTO usage_log (ts, api_key, endpoint, model, prompt_tokens, completion_tokens, cost)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(Math.floor(Date.now() / 1000), apiKey, endpoint, model, promptTokens, completionTokens, cost);
+}
+
+function sumWindow(sinceTs) {
+  return db.prepare(`SELECT COUNT(*) AS requests,
+                            COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                            COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                            COALESCE(SUM(cost), 0) AS cost
+                     FROM usage_log WHERE ts >= ?`).get(sinceTs);
+}
+
+export function usageStats() {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    total: sumWindow(0),
+    day: sumWindow(now - 86400),
+    week: sumWindow(now - 7 * 86400),
+    byKey: db.prepare(`SELECT api_key, COUNT(*) AS requests,
+                              COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
+                              COALESCE(SUM(cost), 0) AS cost
+                       FROM usage_log GROUP BY api_key ORDER BY requests DESC`).all(),
+    byModel: db.prepare(`SELECT model, COUNT(*) AS requests,
+                                COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
+                                COALESCE(SUM(cost), 0) AS cost
+                         FROM usage_log GROUP BY model ORDER BY requests DESC`).all(),
+  };
+}
+
+export function recentUsage(limit = 25) {
+  return db.prepare(`SELECT id, ts, api_key, endpoint, model, prompt_tokens, completion_tokens, cost
+                     FROM usage_log ORDER BY id DESC LIMIT ?`).all(limit);
 }
 
 // Flat peak-hour rates (per 1M tokens) per https://api-docs.deepseek.com/quick_start/pricing

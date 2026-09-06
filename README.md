@@ -105,6 +105,8 @@ Resource guide: the Node process idles around ~60–100 MB RAM. Chromium only ru
 ## Features (parity with the Python version)
 
 - **Multi-Token Pooling**: Random active token rotation.
+- **API Key Management**: Create additional API keys from the dashboard for other people/apps — they authenticate like the master key but can be revoked individually.
+- **Usage Monitoring**: Per-key and per-model request/token/cost tracking, 24h/7d/all-time stats, and a recent-requests log on the dashboard.
 - **Context-Based Session Selector**: SHA-256 signature over the canonicalized message history (up to the last assistant turn), model, and API key scope, to match and resume existing web chat sessions. Session creation is lock-protected against duplicates.
 - **Full History Injection**: Injects full conversation history into new sessions when the signature is not in the DB or on account failover.
 - **Automatic Rate-Limit Recovery**: Auto-marks tokens `RATE_LIMITED` on HTTP 401/403/429, fails over to a new token, transfers full context (including files), single retry.

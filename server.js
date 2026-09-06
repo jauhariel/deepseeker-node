@@ -7,7 +7,8 @@ import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 
 import { API_KEY, ADMIN_USER, ADMIN_PASSWORD, HOST, PORT, BASE_DIR, DISABLE_BROWSER } from './src/config.js';
-import { initDb, getAuthToken, getTokens, getToken, pickToken, addToken, deleteToken } from './src/db.js';
+import { initDb, getAuthToken, getTokens, getToken, pickToken, addToken, deleteToken,
+  addApiKey, listApiKeys, deleteApiKey, isApiKeyValid, usageStats, recentUsage } from './src/db.js';
 import { uploadFile, getFileContent, cookiesValidOnDisk } from './src/deepseek.js';
 import { handleChat, formatAnthropicResponse } from './src/handlers.js';
 import { loginPage, dashboardPage } from './src/views.js';
@@ -37,7 +38,8 @@ function checkKey(req) {
   const key = getApiKey(req);
   const a = Buffer.from(String(key));
   const b = Buffer.from(API_KEY);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+  return isApiKeyValid(key);
 }
 
 const SESSIONS = new Map(); // sid -> last-seen timestamp (ms)
@@ -168,6 +170,7 @@ app.post('/v1/chat/completions', async (req, reply) => {
     stream: body.stream ?? false,
     tools: body.tools ?? null,
     scope: getApiKey(req),
+    endpoint: 'openai.chat_completions',
   });
   return sendChatResult(result, reply);
 });
@@ -211,6 +214,7 @@ app.post('/v1/responses', async (req, reply) => {
     stream: body.stream ?? false,
     tools: body.tools ?? null,
     scope: getApiKey(req),
+    endpoint: 'openai.responses',
   });
 
   if (body.stream) return sendChatResult(result, reply);
@@ -359,6 +363,7 @@ const anthropicMessagesHandler = async (req, reply) => {
     isAnthropic: true,
     reqModel,
     scope: getApiKey(req),
+    endpoint: 'anthropic.messages',
   });
 
   if (body.stream) return sendChatResult(result, reply);
@@ -532,7 +537,13 @@ app.get('/logout', async (req, reply) => {
 
 app.get('/dashboard', async (req, reply) => {
   if (!checkAdmin(req)) return reply.redirect('/login');
-  return reply.type('text/html').send(dashboardPage(getTokens()));
+  return reply.type('text/html').send(dashboardPage({
+    tokens: getTokens(),
+    apiKeys: listApiKeys(),
+    stats: usageStats(),
+    recent: recentUsage(25),
+    masterKey: API_KEY,
+  }));
 });
 
 app.post('/tokens/add', async (req, reply) => {
@@ -549,9 +560,34 @@ app.post('/tokens/:tokenId/delete', async (req, reply) => {
   return reply.redirect('/dashboard');
 });
 
+app.post('/keys/add', async (req, reply) => {
+  if (!checkAdmin(req)) return reply.redirect('/login');
+  const label = String(req.body?.label || '').trim() || null;
+  let key = String(req.body?.api_key || '').trim();
+  if (!key) key = 'dseeker-' + crypto.randomBytes(24).toString('hex');
+  try {
+    addApiKey(label, key);
+  } catch {
+    // duplicate key — ignore and return to dashboard
+  }
+  return reply.redirect('/dashboard');
+});
+
+app.post('/keys/:keyId/delete', async (req, reply) => {
+  if (!checkAdmin(req)) return reply.redirect('/login');
+  deleteApiKey(parseInt(req.params.keyId, 10));
+  return reply.redirect('/dashboard');
+});
+
 app.get('/', async (req, reply) => {
   if (!checkAdmin(req)) return reply.redirect('/login');
-  return reply.type('text/html').send(dashboardPage(getTokens()));
+  return reply.type('text/html').send(dashboardPage({
+    tokens: getTokens(),
+    apiKeys: listApiKeys(),
+    stats: usageStats(),
+    recent: recentUsage(25),
+    masterKey: API_KEY,
+  }));
 });
 
 app.get('/health', async (req, reply) => {

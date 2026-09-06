@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import {
   getAuthToken, getToken, pickToken, findSession, saveSession, deleteSessionsForChat,
-  markActive, markLimited, nextParent, DEEPSEEK_TARIFFS,
+  markActive, markLimited, nextParent, DEEPSEEK_TARIFFS, logUsage,
 } from './db.js';
 import { createNewChat, sendMessage } from './deepseek.js';
 import { buildPrompt, extractAndUploadFiles, generateSignature } from './prompt.js';
@@ -62,6 +62,12 @@ function stripThinkAndTags(cleanText) {
     .trim();
 }
 
+export function computeCost(model, inTokens, outTokens) {
+  const tariffKey = model === 'expert' ? 'deepseek-v4-pro' : model === 'vision' ? 'deepseek-v4-flash-exp' : 'deepseek-v4-flash';
+  const tariff = DEEPSEEK_TARIFFS[tariffKey];
+  return (inTokens / 1_000_000) * tariff.cache_miss_input + (outTokens / 1_000_000) * tariff.output_generation;
+}
+
 // Save both the current signature and the next-turn signature (current history +
 // the assistant reply just produced) so the next request resumes this session.
 function saveSessionPair(sig, tokenId, sessionId, parentMessageId, messages, parsedTools, cleanText, model, scope) {
@@ -87,7 +93,7 @@ function lockFor(sig) {
 }
 
 export async function handleChat(opts) {
-  const { messages, model, thinking = false, search = false, stream = false, tools = null, isAnthropic = false, reqModel = null, scope = '', _retried = false } = opts;
+  const { messages, model, thinking = false, search = false, stream = false, tools = null, isAnthropic = false, reqModel = null, scope = '', _retried = false, endpoint = 'unknown' } = opts;
   const authToken = getAuthToken();
   if (!authToken) {
     return { status: 401, json: { error: 'No auth token. Add via dashboard.' } };
@@ -117,15 +123,17 @@ export async function handleChat(opts) {
             gen = await preflightStream(sendMessage(newSessionId, newTok.token, prompt, 0, thinking, search, model === 'instant' ? null : model, fileIds));
             if (stream) {
               return { stream: isAnthropic
-                ? streamAnthropicResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, reqModel, 0, scope)
-                : streamResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, 0, scope) };
+                ? streamAnthropicResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, reqModel, 0, scope, endpoint)
+                : streamResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, 0, scope, endpoint) };
             }
             const respText = await collectResponse(gen);
             markActive(newTokenId);
             const [parsedTools, cleanText] = parseTools(respText);
             const stripped = stripThinkAndTags(cleanText);
             saveSessionPair(sig, newTokenId, newSessionId, 0, messages, parsedTools, stripped, model, scope);
-            return { status: 200, json: formatResponse(respText, model, messages, tools) };
+            const payload = formatResponse(respText, model, messages, tools);
+            logUsage({ apiKey: scope || 'unknown', endpoint, model, promptTokens: payload.usage.prompt_tokens, completionTokens: payload.usage.completion_tokens, cost: payload.usage.cost });
+            return { status: 200, json: payload };
           } catch (e) {
             if (_retried) {
               const [code, payload] = apiErrorPayload(e, isAnthropic);
@@ -172,8 +180,8 @@ export async function handleChat(opts) {
     gen = await preflightStream(gen);
     if (stream) {
       return { stream: isAnthropic
-        ? streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel, parentMessageId, scope)
-        : streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId, scope) };
+        ? streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel, parentMessageId, scope, endpoint)
+        : streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId, scope, endpoint) };
     }
     const respText = await collectResponse(gen);
     markActive(tokenId);
@@ -181,7 +189,9 @@ export async function handleChat(opts) {
     const [parsedTools, cleanText] = parseTools(respText);
     const stripped = stripThinkAndTags(cleanText);
     saveSessionPair(sig, tokenId, sessionId, parentMessageId, messages, parsedTools, stripped, model, scope);
-    return { status: 200, json: formatResponse(respText, model, messages, tools) };
+    const payload = formatResponse(respText, model, messages, tools);
+    logUsage({ apiKey: scope || 'unknown', endpoint, model, promptTokens: payload.usage.prompt_tokens, completionTokens: payload.usage.completion_tokens, cost: payload.usage.cost });
+    return { status: 200, json: payload };
   } catch (e) {
     const code = httpCode(e);
     if ([401, 403, 429].includes(code)) markLimited(tokenId);
@@ -222,7 +232,7 @@ async function* holdThinkTags(gen) {
 
 const sseData = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
 
-export async function* streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId = 0, scope = '') {
+export async function* streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId = 0, scope = '', endpoint = 'unknown') {
   const parser = new StreamToolParser();
   let fullText = '';
   let isThinking = false;
@@ -278,6 +288,9 @@ export async function* streamResponse(gen, model, messages, tokenId, sessionId, 
 
     if (!failed) {
       saveSessionPair(sig, tokenId, sessionId, parentMessageId, messages, parsedTools, cleanText, model, scope);
+      const inTokens = countTokens(messagesText(messages));
+      const outTokens = countTokens(fullText);
+      logUsage({ apiKey: scope || 'unknown', endpoint, model, promptTokens: inTokens, completionTokens: outTokens, cost: computeCost(model, inTokens, outTokens) });
     }
 
     if (!aborted && !failed) {
@@ -306,7 +319,7 @@ export async function* streamResponse(gen, model, messages, tokenId, sessionId, 
   }
 }
 
-export async function* streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel = null, parentMessageId = 0, scope = '') {
+export async function* streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel = null, parentMessageId = 0, scope = '', endpoint = 'unknown') {
   const msgId = `msg_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
   const inTokens = countTokens(messagesText(messages));
   const modelName = reqModel || model;
@@ -380,6 +393,7 @@ export async function* streamAnthropicResponse(gen, model, messages, tokenId, se
 
     if (!failed) {
       saveSessionPair(sig, tokenId, sessionId, parentMessageId, messages, parsedTools, cleanText, model, scope);
+      logUsage({ apiKey: scope || 'unknown', endpoint, model, promptTokens: inTokens, completionTokens: outTokens, cost: computeCost(model, inTokens, outTokens) });
     }
 
     let idx = blockIndex;
@@ -442,9 +456,7 @@ export function formatResponse(text, model, messages, tools = null) {
 
   const inTokens = countTokens(messagesText(messages));
   const outTokens = countTokens(text);
-  const tariffKey = model === 'expert' ? 'deepseek-v4-pro' : model === 'vision' ? 'deepseek-v4-flash-exp' : 'deepseek-v4-flash';
-  const tariff = DEEPSEEK_TARIFFS[tariffKey];
-  const cost = (inTokens / 1_000_000) * tariff.cache_miss_input + (outTokens / 1_000_000) * tariff.output_generation;
+  const cost = computeCost(model, inTokens, outTokens);
 
   const msgDict = {
     role: 'assistant',
