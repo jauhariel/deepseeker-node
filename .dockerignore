@@ -1,0 +1,8 @@
+node_modules
+.env
+*.db
+*.db-wal
+*.db-shm
+aws_cookies_deepseek.json
+server_test.log
+.git
