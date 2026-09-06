@@ -11,7 +11,7 @@ import { initDb, getAuthToken, getTokens, getToken, pickToken, addToken, deleteT
   addApiKey, listApiKeys, deleteApiKey, isApiKeyValid, usageStats, recentUsage } from './src/db.js';
 import { uploadFile, getFileContent, cookiesValidOnDisk } from './src/deepseek.js';
 import { handleChat, formatAnthropicResponse } from './src/handlers.js';
-import { loginPage, dashboardPage } from './src/views.js';
+import { loginPage, dashboardPage, landingPage } from './src/views.js';
 
 initDb();
 
@@ -580,14 +580,7 @@ app.post('/keys/:keyId/delete', async (req, reply) => {
 });
 
 app.get('/', async (req, reply) => {
-  if (!checkAdmin(req)) return reply.redirect('/login');
-  return reply.type('text/html').send(dashboardPage({
-    tokens: getTokens(),
-    apiKeys: listApiKeys(),
-    stats: usageStats(),
-    recent: recentUsage(25),
-    masterKey: API_KEY,
-  }));
+  return reply.type('text/html').send(landingPage());
 });
 
 app.get('/health', async (req, reply) => {

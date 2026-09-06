@@ -1,6 +1,9 @@
 import { escapeHtml } from './util.js';
 
-function baseLayout(title, content) {
+function baseLayout(title, content, { authed = true } = {}) {
+  const navLinks = authed
+    ? '<a href="/dashboard">Dashboard</a>\n            <a href="/logout">Logout</a>'
+    : '<a href="#docs">Docs</a>\n            <a href="/dashboard">Dashboard</a>\n            <a href="/login">Login</a>';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,10 +14,9 @@ function baseLayout(title, content) {
 </head>
 <body>
     <nav>
-        <span class="brand">DeeperSeeker</span>
+        <a href="/" class="brand">DeeperSeeker</a>
         <span class="nav-links">
-            <a href="/">Dashboard</a>
-            <a href="/logout">Logout</a>
+            ${navLinks}
         </span>
     </nav>
     <main>
@@ -35,7 +37,107 @@ export function loginPage(error = null) {
       <button type="submit" class="btn-block">Login</button>
   </form>
 </div>`;
-  return baseLayout('Login - DeeperSeeker', content);
+  return baseLayout('Login - DeeperSeeker', content, { authed: false });
+}
+
+export function landingPage() {
+  const content = `
+<div class="hero">
+    <p class="hero-eyebrow">DeepSeek web reverse proxy</p>
+    <h1 class="hero-title">One endpoint. OpenAI &amp; Anthropic compatible.</h1>
+    <p class="hero-sub">DeeperSeeker turns a DeepSeek web account into a local API server with token pooling, session continuity, tool calling, streaming, and per-key usage tracking.</p>
+    <div class="hero-actions">
+        <a href="/dashboard" class="btn-link btn-primary">Open Dashboard</a>
+        <a href="https://github.com/jauhariel/deepseeker-node" class="btn-link btn-secondary">GitHub</a>
+    </div>
+</div>
+
+<section id="docs">
+    <h2>Quick Start</h2>
+    <p class="hint">Point any OpenAI- or Anthropic-compatible client at this server and authenticate with your API key (the master key from <code>.env</code>, or any key created on the dashboard).</p>
+    <div class="docs-grid">
+        <div>
+            <h3>OpenAI</h3>
+            <p class="muted">Base URL: <code>http://localhost:4000/v1</code></p>
+            <pre class="codeblock">curl http://localhost:4000/v1/chat/completions \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "expert",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false
+  }'</pre>
+        </div>
+        <div>
+            <h3>Anthropic</h3>
+            <p class="muted">Base URL: <code>http://localhost:4000</code></p>
+            <pre class="codeblock">curl http://localhost:4000/v1/messages \\
+  -H "x-api-key: YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "expert",
+    "max_tokens": 1024,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'</pre>
+        </div>
+    </div>
+    <p class="hint">Set <code>"stream": true</code> for server-sent events. Also available: <code>POST /v1/responses</code>, <code>GET /v1/models</code>, <code>POST /v1/files</code>, <code>GET /v1/files/{id}/content</code>, <code>POST /v1/files/upload</code>.</p>
+</section>
+
+<section>
+    <h2>With the OpenAI SDK</h2>
+    <pre class="codeblock">from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:4000/v1", api_key="YOUR_API_KEY")
+
+resp = client.chat.completions.create(
+    model="expert",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(resp.choices[0].message.content)</pre>
+</section>
+
+<section>
+    <h2>Models</h2>
+    <table>
+        <thead>
+            <tr><th>Model</th><th>Tier</th><th>Input / 1M tokens</th><th>Output / 1M tokens</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>instant</code></td><td>DeepSeek V4 Flash</td><td class="num">$0.44</td><td class="num">$1.32</td></tr>
+            <tr><td><code>vision</code></td><td>DeepSeek V4 Flash Exp (image input)</td><td class="num">$0.44</td><td class="num">$1.32</td></tr>
+            <tr><td><code>expert</code></td><td>DeepSeek V4 Pro (default)</td><td class="num">$1.32</td><td class="num">$3.96</td></tr>
+        </tbody>
+    </table>
+    <p class="hint" style="margin-top:10px;">Aliases <code>anthropic/claude-instant</code>, <code>anthropic/claude-vision</code>, <code>anthropic/claude-expert</code> are also exposed for Claude Desktop auto-discovery. If no model is sent, requests default to <code>expert</code>.</p>
+</section>
+
+<section>
+    <h2>Setup: DeepSeek Auth Token</h2>
+    <ol class="steps-list">
+        <li>Open an <strong>incognito/private</strong> window and log in at <a href="https://chat.deepseek.com" target="_blank">chat.deepseek.com</a>.</li>
+        <li>Open DevTools (F12) → Console, then run: <code>JSON.parse(localStorage.getItem("userToken")).value</code></li>
+        <li>Copy the raw token (no quotes) into the <a href="/dashboard">dashboard</a>.</li>
+        <li>Close the incognito window to keep the session alive. Logging out of DeepSeek in a browser invalidates the token.</li>
+    </ol>
+</section>
+
+<section>
+    <h2>Features</h2>
+    <div class="feature-grid">
+        <div class="feature"><h3>Token pooling</h3><p>Multiple DeepSeek accounts with random rotation and automatic rate-limit failover.</p></div>
+        <div class="feature"><h3>Session continuity</h3><p>Requests resume the same web chat via history signatures; long conversations survive restarts.</p></div>
+        <div class="feature"><h3>Tool calling</h3><p>DSML, XML, and JSON tool-call formats normalized into OpenAI/Anthropic schemas.</p></div>
+        <div class="feature"><h3>Streaming</h3><p>SSE for both API styles, with reasoning (&lt;think&gt;) streams intact across chunk boundaries.</p></div>
+        <div class="feature"><h3>Files &amp; vision</h3><p>Image and document upload, URL/base64 extraction, vision-model file forking.</p></div>
+        <div class="feature"><h3>Multi-key access</h3><p>Issue revocable API keys and monitor requests, tokens, and cost per key.</p></div>
+    </div>
+</section>
+
+<div class="warning">
+    Automated use violates DeepSeek's Terms of Use. Use a dedicated throwaway account — never your personal one — and respect DeepSeek's limits. Educational purpose only; not affiliated with DeepSeek.
+</div>`;
+  return baseLayout('DeeperSeeker', content, { authed: false });
 }
 
 function maskKey(k) {
