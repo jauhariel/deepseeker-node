@@ -40,7 +40,7 @@ export function loginPage(error = null) {
   return baseLayout('Login - DeeperSeeker', content, { authed: false });
 }
 
-export function landingPage() {
+export function landingPage(baseUrl = 'http://localhost:4000') {
   const content = `
 <div class="hero">
     <p class="hero-eyebrow">DeepSeek web reverse proxy</p>
@@ -58,8 +58,8 @@ export function landingPage() {
     <div class="docs-grid">
         <div>
             <h3>OpenAI</h3>
-            <p class="muted">Base URL: <code>http://localhost:4000/v1</code></p>
-            <pre class="codeblock">curl http://localhost:4000/v1/chat/completions \\
+            <p class="muted">Base URL: <code>${escapeHtml(baseUrl)}/v1</code></p>
+            <pre class="codeblock">curl ${escapeHtml(baseUrl)}/v1/chat/completions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -70,8 +70,8 @@ export function landingPage() {
         </div>
         <div>
             <h3>Anthropic</h3>
-            <p class="muted">Base URL: <code>http://localhost:4000</code></p>
-            <pre class="codeblock">curl http://localhost:4000/v1/messages \\
+            <p class="muted">Base URL: <code>${escapeHtml(baseUrl)}</code></p>
+            <pre class="codeblock">curl ${escapeHtml(baseUrl)}/v1/messages \\
   -H "x-api-key: YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -88,7 +88,7 @@ export function landingPage() {
     <h2>With the OpenAI SDK</h2>
     <pre class="codeblock">from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:4000/v1", api_key="YOUR_API_KEY")
+client = OpenAI(base_url="${escapeHtml(baseUrl)}/v1", api_key="YOUR_API_KEY")
 
 resp = client.chat.completions.create(
     model="expert",
@@ -162,7 +162,7 @@ function statCard(label, value, sub) {
     </div>`;
 }
 
-export function dashboardPage({ tokens, apiKeys, stats, recent, masterKey }) {
+export function dashboardPage({ tokens, apiKeys, stats, recent, masterKey, baseUrl = 'http://localhost:4000' }) {
   const keyLabels = new Map();
   keyLabels.set(masterKey, 'master');
   for (const k of apiKeys) keyLabels.set(k.api_key, k.label || `key #${k.id}`);
@@ -314,7 +314,7 @@ export function dashboardPage({ tokens, apiKeys, stats, recent, masterKey }) {
   const apiSection = `
 <section>
     <h2>API</h2>
-    <p>OpenAI base URL: <code>http://localhost:4000/v1</code> &nbsp;·&nbsp; Anthropic base URL: <code>http://localhost:4000</code></p>
+    <p>OpenAI base URL: <code>${escapeHtml(baseUrl)}/v1</code> &nbsp;·&nbsp; Anthropic base URL: <code>${escapeHtml(baseUrl)}</code></p>
     <p>Models: <code>instant</code>, <code>vision</code>, <code>expert</code> (default when omitted: <code>expert</code>)</p>
 </section>`;
 

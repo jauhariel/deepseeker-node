@@ -6,7 +6,7 @@ import fastifyFormbody from '@fastify/formbody';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 
-import { API_KEY, ADMIN_USER, ADMIN_PASSWORD, HOST, PORT, BASE_DIR, DISABLE_BROWSER } from './src/config.js';
+import { API_KEY, ADMIN_USER, ADMIN_PASSWORD, HOST, PORT, BASE_DIR, DISABLE_BROWSER, PUBLIC_URL } from './src/config.js';
 import { initDb, getAuthToken, getTokens, getToken, pickToken, addToken, deleteToken,
   addApiKey, listApiKeys, deleteApiKey, isApiKeyValid, usageStats, recentUsage } from './src/db.js';
 import { uploadFile, getFileContent, cookiesValidOnDisk } from './src/deepseek.js';
@@ -139,6 +139,14 @@ function resolveModel(modelRaw) {
   if (m.includes('instant') || m.includes('haiku') || m.includes('flash')) return 'instant';
   if (m.includes('vision')) return 'vision';
   return 'expert';
+}
+
+// Public base URL for docs/dashboard display: DEEPSEEKER_PUBLIC_URL if set,
+// otherwise derived from the request (respects X-Forwarded-Proto behind a proxy).
+function baseUrl(req) {
+  if (PUBLIC_URL) return PUBLIC_URL;
+  const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  return `${proto}://${req.headers.host || `${HOST}:${PORT}`}`;
 }
 
 // Sends the result of handleChat: either a JSON payload or an SSE stream.
@@ -543,6 +551,7 @@ app.get('/dashboard', async (req, reply) => {
     stats: usageStats(),
     recent: recentUsage(25),
     masterKey: API_KEY,
+    baseUrl: baseUrl(req),
   }));
 });
 
@@ -580,7 +589,7 @@ app.post('/keys/:keyId/delete', async (req, reply) => {
 });
 
 app.get('/', async (req, reply) => {
-  return reply.type('text/html').send(landingPage());
+  return reply.type('text/html').send(landingPage(baseUrl(req)));
 });
 
 app.get('/health', async (req, reply) => {

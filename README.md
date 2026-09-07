@@ -80,6 +80,7 @@ Resource guide: the Node process idles around ~60–100 MB RAM. Chromium only ru
 | `DEEPSEEKER_MAX_HISTORY_TOKENS` | History budget for session rebuilds | `24000` |
 | `DEEPSEEKER_MAX_TOOL_RESULT_TOKENS` | Tool-result budget for session rebuilds | `12000` |
 | `DEEPSEEKER_DISABLE_BROWSER` | `1` = never launch Chromium; run fully cookieless | unset |
+| `DEEPSEEKER_PUBLIC_URL` | Public base URL shown in docs/dashboard (auto-detected from request if unset) | unset |
 
 ## Auth Token Setup
 
