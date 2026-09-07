@@ -81,7 +81,56 @@ export function landingPage(baseUrl = 'http://localhost:4000') {
   }'</pre>
         </div>
     </div>
-    <p class="hint">Set <code>"stream": true</code> for server-sent events, or <code>"search": true</code> to enable DeepSeek web search (Anthropic clients can also send a <code>web_search</code> tool). Also available: <code>POST /v1/responses</code>, <code>GET /v1/models</code>, <code>POST /v1/files</code>, <code>GET /v1/files/{id}/content</code>, <code>POST /v1/files/upload</code>.</p>
+    <p class="hint">Set <code>"stream": true</code> for server-sent events, or <code>"search": true</code> to enable DeepSeek web search (Anthropic clients can also send a <code>web_search</code> tool).</p>
+</section>
+
+<section>
+    <h2>Request Options</h2>
+    <div class="docs-grid">
+        <div>
+            <h3>Streaming (SSE)</h3>
+            <pre class="codeblock">curl -N ${escapeHtml(baseUrl)}/v1/chat/completions \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "expert",
+    "stream": true,
+    "messages": [{"role": "user", "content": "tulis puisi pendek"}]
+  }'</pre>
+        </div>
+        <div>
+            <h3>Web search &amp; thinking</h3>
+            <pre class="codeblock">curl ${escapeHtml(baseUrl)}/v1/chat/completions \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "instant",
+    "search": true,
+    "thinking": {"type": "enabled"},
+    "messages": [{"role": "user", "content": "berita hari ini?"}]
+  }'</pre>
+        </div>
+    </div>
+    <p class="hint">Thinking juga bisa diaktifkan lewat <code>"reasoning_effort": "high"</code> atau <code>"effort": "high"</code>. Jawaban reasoning muncul di <code>reasoning_content</code> (OpenAI) atau block <code>thinking</code> (Anthropic).</p>
+</section>
+
+<section>
+    <h2>Endpoints</h2>
+    <div class="table-wrap"><table>
+        <thead>
+            <tr><th>Endpoint</th><th>Style</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>POST /v1/chat/completions</code></td><td>OpenAI</td><td>Chat, streaming &amp; non-streaming, tools, search, thinking</td></tr>
+            <tr><td><code>POST /v1/responses</code></td><td>OpenAI</td><td>Responses API</td></tr>
+            <tr><td><code>POST /v1/messages</code></td><td>Anthropic</td><td>Messages API (also at <code>/messages</code>)</td></tr>
+            <tr><td><code>GET /v1/models</code></td><td>OpenAI</td><td>Model list with capability metadata</td></tr>
+            <tr><td><code>POST /v1/files</code></td><td>OpenAI</td><td>Upload a file (multipart)</td></tr>
+            <tr><td><code>GET /v1/files/{id}</code></td><td>OpenAI</td><td>Download file content (also <code>/content</code>)</td></tr>
+            <tr><td><code>POST /v1/files/upload</code></td><td>Anthropic</td><td>Upload a file (multipart)</td></tr>
+            <tr><td><code>GET /health</code></td><td>—</td><td>Server status (tokens &amp; cookies)</td></tr>
+        </tbody>
+    </table></div>
 </section>
 
 <section>
@@ -129,6 +178,7 @@ print(resp.choices[0].message.content)</pre>
         <div class="feature"><h3>Session continuity</h3><p>Requests resume the same web chat via history signatures; long conversations survive restarts.</p></div>
         <div class="feature"><h3>Tool calling</h3><p>DSML, XML, and JSON tool-call formats normalized into OpenAI/Anthropic schemas.</p></div>
         <div class="feature"><h3>Streaming</h3><p>SSE for both API styles, with reasoning (&lt;think&gt;) streams intact across chunk boundaries.</p></div>
+        <div class="feature"><h3>Web search</h3><p>Real-time answers with citations via <code>"search": true</code> or Anthropic's web_search tool.</p></div>
         <div class="feature"><h3>Files &amp; vision</h3><p>Image and document upload, URL/base64 extraction, vision-model file forking.</p></div>
         <div class="feature"><h3>Multi-key access</h3><p>Issue revocable API keys and monitor requests, tokens, and cost per key.</p></div>
     </div>

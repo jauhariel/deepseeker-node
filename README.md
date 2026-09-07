@@ -103,6 +103,15 @@ Resource guide: the Node process idles around ~60–100 MB RAM. Chromium only ru
 - **Auth Key**: Configured in `.env` (`DEEPSEEKER_API_KEY`)
 - **Models**: `instant` (flash), `vision` (flash + vision), `expert` (pro) — also exposed as `anthropic/claude-instant`, `anthropic/claude-vision`, `anthropic/claude-expert` aliases for Claude Desktop auto-discovery. If no `model` is sent, requests default to `expert`.
 
+Request flags (both API styles):
+
+| Flag | Effect |
+|---|---|
+| `"stream": true` | Server-sent events streaming |
+| `"search": true` | Enable DeepSeek web search (Anthropic: also via a `web_search` server tool) |
+| `"thinking": {"type": "enabled"}` | Enable reasoning (also `"reasoning_effort": "high"` / `"effort": "high"`) |
+| `"tools": [...]` | Function/tool calling (OpenAI or Anthropic schema) |
+
 ## Features (parity with the Python version)
 
 - **Multi-Token Pooling**: Random active token rotation.
