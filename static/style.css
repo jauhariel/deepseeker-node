@@ -138,7 +138,13 @@ code {
     border-radius: 4px;
     font-size: 12px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-wrap: anywhere;
 }
+
+/* --- tables: scroll sideways instead of overflowing the card --- */
+.table-wrap { overflow-x: auto; margin-top: 12px; }
+.table-wrap table { margin-top: 0; min-width: 560px; }
+.table-wrap code { overflow-wrap: normal; white-space: nowrap; }
 
 /* --- forms --- */
 input[type="text"], input[type="password"] {
@@ -277,9 +283,20 @@ h3 { color: var(--text-strong); font-size: 13px; font-weight: 600; margin-bottom
     grid-template-columns: 1fr 1fr;
     gap: 18px;
 }
+/* Grid items default to min-width:auto, which lets long code blocks push the
+   page wider than the viewport on mobile — allow them to shrink instead. */
+.docs-grid > *, .feature-grid > *, .stat-grid > * { min-width: 0; }
 @media (max-width: 800px) {
     .docs-grid { grid-template-columns: 1fr; }
     .stat-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+    main { padding: 0 14px 40px; margin-top: 18px; }
+    nav { padding: 0 14px; }
+    .hero { padding: 36px 0 28px; }
+    .hero-title { font-size: 27px; }
+    .bar-row { flex-wrap: wrap; }
+    .bar-val { width: 100%; white-space: normal; }
 }
 
 .steps-list { margin: 4px 0 4px 22px; font-size: 13.5px; }

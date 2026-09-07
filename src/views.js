@@ -99,7 +99,7 @@ print(resp.choices[0].message.content)</pre>
 
 <section>
     <h2>Models</h2>
-    <table>
+    <div class="table-wrap"><table>
         <thead>
             <tr><th>Model</th><th>Tier</th><th>Input / 1M tokens</th><th>Output / 1M tokens</th></tr>
         </thead>
@@ -108,7 +108,7 @@ print(resp.choices[0].message.content)</pre>
             <tr><td><code>vision</code></td><td>DeepSeek V4 Flash Exp (image input)</td><td class="num">$0.44</td><td class="num">$1.32</td></tr>
             <tr><td><code>expert</code></td><td>DeepSeek V4 Pro (default)</td><td class="num">$1.32</td><td class="num">$3.96</td></tr>
         </tbody>
-    </table>
+    </table></div>
     <p class="hint" style="margin-top:10px;">Aliases <code>anthropic/claude-instant</code>, <code>anthropic/claude-vision</code>, <code>anthropic/claude-expert</code> are also exposed for Claude Desktop auto-discovery. If no model is sent, requests default to <code>expert</code>.</p>
 </section>
 
@@ -231,14 +231,14 @@ export function dashboardPage({ tokens, apiKeys, stats, recent, masterKey, baseU
         <input type="text" name="api_key" placeholder="Custom key (optional — auto-generated if empty)" style="width:340px">
         <button type="submit">Create Key</button>
     </form>
-    <table>
+    <div class="table-wrap"><table>
         <thead>
             <tr><th>Label</th><th>Key</th><th>Created</th><th class="num">Requests</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr>
         </thead>
         <tbody>
             ${keyRows}
         </tbody>
-    </table>
+    </table></div>
 </section>`;
 
   // --- deepseek tokens ---
@@ -277,14 +277,14 @@ export function dashboardPage({ tokens, apiKeys, stats, recent, masterKey, baseU
         <input type="text" name="auth_token" placeholder="Paste auth token here (no quotes)" style="width:380px">
         <button type="submit">Add Token</button>
     </form>
-    ${tokens.length ? `<table>
+    ${tokens.length ? `<div class="table-wrap"><table>
         <thead>
             <tr><th>ID</th><th>Alias</th><th>Token</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
             ${tokenRows}
         </tbody>
-    </table>` : '<p class="muted">No tokens yet.</p>'}
+    </table></div>` : '<p class="muted">No tokens yet.</p>'}
 </section>`;
 
   // --- recent requests ---
@@ -301,14 +301,14 @@ export function dashboardPage({ tokens, apiKeys, stats, recent, masterKey, baseU
   const recentSection = recent.length ? `
 <section>
     <h2>Recent Requests</h2>
-    <table>
+    <div class="table-wrap"><table>
         <thead>
             <tr><th>Time</th><th>Key</th><th>Endpoint</th><th>Model</th><th class="num">In</th><th class="num">Out</th><th class="num">Cost</th></tr>
         </thead>
         <tbody>
             ${recentRows}
         </tbody>
-    </table>
+    </table></div>
 </section>` : '';
 
   const apiSection = `
