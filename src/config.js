@@ -33,3 +33,8 @@ export const PUBLIC_URL = (process.env.DEEPSEEKER_PUBLIC_URL || '').replace(/\/+
 // Model used when a request does not specify one.
 const _defaultModel = (process.env.DEEPSEEKER_DEFAULT_MODEL || 'instant').toLowerCase();
 export const DEFAULT_MODEL = ['instant', 'vision', 'expert'].includes(_defaultModel) ? _defaultModel : 'instant';
+
+// When set (1/true/yes), every chat request runs with thinking enabled,
+// regardless of what the client sends (escape hatch for clients that
+// cannot toggle reasoning themselves).
+export const FORCE_THINKING = /^(1|true|yes)$/i.test(process.env.DEEPSEEKER_FORCE_THINKING || '');

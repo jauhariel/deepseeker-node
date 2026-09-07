@@ -6,7 +6,7 @@ import fastifyFormbody from '@fastify/formbody';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 
-import { API_KEY, ADMIN_USER, ADMIN_PASSWORD, HOST, PORT, BASE_DIR, DISABLE_BROWSER, PUBLIC_URL, DEFAULT_MODEL } from './src/config.js';
+import { API_KEY, ADMIN_USER, ADMIN_PASSWORD, HOST, PORT, BASE_DIR, DISABLE_BROWSER, PUBLIC_URL, DEFAULT_MODEL, FORCE_THINKING } from './src/config.js';
 import { initDb, getAuthToken, getTokens, getToken, pickToken, addToken, deleteToken,
   addApiKey, listApiKeys, deleteApiKey, isApiKeyValid, usageStats, recentUsage } from './src/db.js';
 import { uploadFile, getFileContent, cookiesValidOnDisk } from './src/deepseek.js';
@@ -173,7 +173,7 @@ app.post('/v1/chat/completions', async (req, reply) => {
   const result = await handleChat({
     messages,
     model,
-    thinking: isThinkingEnabled(body, req),
+    thinking: FORCE_THINKING || isThinkingEnabled(body, req),
     search: body.search ?? false,
     stream: body.stream ?? false,
     tools: body.tools ?? null,
@@ -217,7 +217,7 @@ app.post('/v1/responses', async (req, reply) => {
   const result = await handleChat({
     messages,
     model,
-    thinking: isThinkingEnabled(body, req),
+    thinking: FORCE_THINKING || isThinkingEnabled(body, req),
     search: body.search ?? false,
     stream: body.stream ?? false,
     tools: body.tools ?? null,
@@ -371,7 +371,7 @@ const anthropicMessagesHandler = async (req, reply) => {
   const result = await handleChat({
     messages: openaiMsgs,
     model,
-    thinking: isThinkingEnabled(body, req),
+    thinking: FORCE_THINKING || isThinkingEnabled(body, req),
     search: wantsSearch,
     stream: body.stream ?? false,
     tools: openaiTools.length ? openaiTools : null,

@@ -82,6 +82,7 @@ Resource guide: the Node process idles around ~60–100 MB RAM. Chromium only ru
 | `DEEPSEEKER_DISABLE_BROWSER` | `1` = never launch Chromium; run fully cookieless | unset |
 | `DEEPSEEKER_PUBLIC_URL` | Public base URL shown in docs/dashboard (auto-detected from request if unset) | unset |
 | `DEEPSEEKER_DEFAULT_MODEL` | Model used when a request omits `model` (`instant`/`vision`/`expert`) | `instant` |
+| `DEEPSEEKER_FORCE_THINKING` | `1` = enable thinking/reasoning on every request regardless of client flags | unset |
 
 ## Auth Token Setup
 
