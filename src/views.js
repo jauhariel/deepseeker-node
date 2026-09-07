@@ -81,7 +81,7 @@ export function landingPage(baseUrl = 'http://localhost:4000') {
   }'</pre>
         </div>
     </div>
-    <p class="hint">Set <code>"stream": true</code> for server-sent events. Also available: <code>POST /v1/responses</code>, <code>GET /v1/models</code>, <code>POST /v1/files</code>, <code>GET /v1/files/{id}/content</code>, <code>POST /v1/files/upload</code>.</p>
+    <p class="hint">Set <code>"stream": true</code> for server-sent events, or <code>"search": true</code> to enable DeepSeek web search (Anthropic clients can also send a <code>web_search</code> tool). Also available: <code>POST /v1/responses</code>, <code>GET /v1/models</code>, <code>POST /v1/files</code>, <code>GET /v1/files/{id}/content</code>, <code>POST /v1/files/upload</code>.</p>
 </section>
 
 <section>

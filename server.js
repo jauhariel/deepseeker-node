@@ -339,6 +339,9 @@ const anthropicMessagesHandler = async (req, reply) => {
 
   const openaiTools = [];
   for (const t of tools) {
+    // Anthropic server-side tools (web_search etc.) are not callable functions;
+    // they map to DeepSeek's search_enabled flag instead of the prompt's tool list.
+    if (t && typeof t.type === 'string' && t.type.startsWith('web_search')) continue;
     if (t.type === 'function') {
       openaiTools.push({
         type: 'function',
@@ -361,11 +364,15 @@ const anthropicMessagesHandler = async (req, reply) => {
   }
 
   const reqModel = body.model;
+  // Anthropic clients request web search either via a server tool
+  // ({"type": "web_search_20250305", ...}) or a plain {"search": true} flag.
+  const wantsSearch = body.search === true ||
+    tools.some((t) => t && typeof t.type === 'string' && t.type.startsWith('web_search'));
   const result = await handleChat({
     messages: openaiMsgs,
     model,
     thinking: isThinkingEnabled(body, req),
-    search: false,
+    search: wantsSearch,
     stream: body.stream ?? false,
     tools: openaiTools.length ? openaiTools : null,
     isAnthropic: true,

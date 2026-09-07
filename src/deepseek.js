@@ -308,6 +308,27 @@ export async function* sendMessage(chatId, authToken, message, parentMessageId, 
   let gotOutput = false;
   const emptyError = () => new Error('Empty response from DeepSeek (prompt may exceed the session context limit)');
 
+  function* appendFragment(fragment) {
+    if (fragment.type === 'RESPONSE') {
+      if (thinkOpen) {
+        yield '\n</think>\n\n';
+        thinkOpen = false;
+      }
+      gotOutput = true;
+      yield fragment.content ?? '';
+    } else if (fragment.type === 'THINK') {
+      if (!thinkOpen) {
+        yield '<think>\n';
+        thinkOpen = true;
+      }
+      gotOutput = true;
+      yield fragment.content ?? '';
+    } else {
+      gotOutput = true;
+      yield fragment.content ?? '';
+    }
+  }
+
   for await (const line of iterateLines(resp.body)) {
     if (!line) continue;
     const decodedLine = line.trim();
@@ -324,13 +345,27 @@ export async function* sendMessage(chatId, authToken, message, parentMessageId, 
       return;
     }
     if (data.o === 'BATCH' && Array.isArray(data.v)) {
+      // BATCH wraps sub-operations. Besides quasi_status FINISHED it can carry
+      // real content, e.g. {"p":"response","o":"BATCH","v":[{"p":"fragments",
+      // "o":"APPEND","v":[{"type":"RESPONSE","content":"##"}]}]} — dropping it
+      // eats the first characters of the reply.
       for (const op of data.v) {
-        if (op && typeof op === 'object' && op.p === 'quasi_status' && op.v === 'FINISHED') {
+        if (!op || typeof op !== 'object') continue;
+        if (op.p === 'quasi_status' && op.v === 'FINISHED') {
           if (thinkOpen) yield '\n</think>\n\n';
           if (!gotOutput) throw emptyError();
           return;
         }
+        if (op.p === 'fragments' && op.o === 'APPEND' && Array.isArray(op.v)) {
+          for (const fragment of op.v) {
+            yield* appendFragment(fragment);
+          }
+        } else if (typeof op.v === 'string' && op.v && String(op.p).endsWith('/content')) {
+          gotOutput = true;
+          yield op.v;
+        }
       }
+      continue;
     }
     if (data.v && typeof data.v === 'object' && !Array.isArray(data.v) && 'response' in data.v) {
       const fragments = data.v.response?.fragments;
@@ -359,30 +394,17 @@ export async function* sendMessage(chatId, authToken, message, parentMessageId, 
       const fragments = data.v;
       if (Array.isArray(fragments)) {
         for (const fragment of fragments) {
-          if (fragment.type === 'RESPONSE') {
-            if (thinkOpen) {
-              yield '\n</think>\n\n';
-              thinkOpen = false;
-            }
-            gotOutput = true;
-            yield fragment.content ?? '';
-          } else if (fragment.type === 'THINK') {
-            if (!thinkOpen) {
-              yield '<think>\n';
-              thinkOpen = true;
-            }
-            gotOutput = true;
-            yield fragment.content ?? '';
-          } else {
-            gotOutput = true;
-            yield fragment.content ?? '';
-          }
+          yield* appendFragment(fragment);
         }
       }
       continue;
     }
+    // String deltas carry content either bare ({"v":"..."}) or path-scoped to a
+    // fragment content append ({"p":"response/fragments/-1/content","v":"..."}).
+    // Control messages ({"p":".../status","v":"FINISHED"},
+    // {"p":"response/conversation_mode","v":"SEARCH"}) must not leak into the text.
     const v = data.v;
-    if (typeof v === 'string' && v) {
+    if (typeof v === 'string' && v && (data.p === undefined || String(data.p).endsWith('/content'))) {
       gotOutput = true;
       yield v;
     }
