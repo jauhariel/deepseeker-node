@@ -111,7 +111,7 @@ Request flags (both API styles):
 | Flag | Effect |
 |---|---|
 | `"stream": true` | Server-sent events streaming |
-| `"search": true` | Enable DeepSeek web search (Anthropic: also via a `web_search` server tool) |
+| `"search": true` | Enable DeepSeek web search (Anthropic: also via a `web_search` server tool). Source links are returned in `citations` (URL list, Perplexity-style) and `search_results` (title + URL), both non-streaming and in the final SSE chunk/message_delta |
 | `"thinking": {"type": "enabled"}` | Enable reasoning (also `"reasoning_effort": "high"` / `"effort": "high"`) |
 | `"tools": [...]` | Function/tool calling (OpenAI or Anthropic schema) |
 

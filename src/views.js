@@ -178,7 +178,7 @@ print(resp.choices[0].message.content)</pre>
         <div class="feature"><h3>Session continuity</h3><p>Requests resume the same web chat via history signatures; long conversations survive restarts.</p></div>
         <div class="feature"><h3>Tool calling</h3><p>DSML, XML, and JSON tool-call formats normalized into OpenAI/Anthropic schemas.</p></div>
         <div class="feature"><h3>Streaming</h3><p>SSE for both API styles, with reasoning (&lt;think&gt;) streams intact across chunk boundaries.</p></div>
-        <div class="feature"><h3>Web search</h3><p>Real-time answers with citations via <code>"search": true</code> or Anthropic's web_search tool.</p></div>
+        <div class="feature"><h3>Web search</h3><p>Real-time answers with citations via <code>"search": true</code> or Anthropic's web_search tool. Source links are returned in <code>citations</code> / <code>search_results</code>.</p></div>
         <div class="feature"><h3>Files &amp; vision</h3><p>Image and document upload, URL/base64 extraction, vision-model file forking.</p></div>
         <div class="feature"><h3>Multi-key access</h3><p>Issue revocable API keys and monitor requests, tokens, and cost per key.</p></div>
     </div>

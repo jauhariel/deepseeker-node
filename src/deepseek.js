@@ -248,7 +248,7 @@ async function* iterateLines(body) {
   }
 }
 
-export async function* sendMessage(chatId, authToken, message, parentMessageId, thinking = false, search = false, modelType = null, fileIdsInput = []) {
+export async function* sendMessage(chatId, authToken, message, parentMessageId, thinking = false, search = false, modelType = null, fileIdsInput = [], meta = null) {
   if (parentMessageId === 0) parentMessageId = null;
 
   let fileIds;
@@ -343,6 +343,14 @@ export async function* sendMessage(chatId, authToken, message, parentMessageId, 
       if (thinkOpen) yield '\n</think>\n\n';
       if (!gotOutput) throw emptyError();
       return;
+    }
+    // Search citations: {"p":"response/fragments/-1/results","v":[{url,title,
+    // snippet,cite_index},...]} — collected into meta for the API response.
+    if (meta && typeof data.p === 'string' && data.p.endsWith('/results') && Array.isArray(data.v)) {
+      meta.searchResults = (meta.searchResults || []).concat(
+        data.v.filter((r) => r && typeof r === 'object' && r.url)
+      );
+      continue;
     }
     if (data.o === 'BATCH' && Array.isArray(data.v)) {
       // BATCH wraps sub-operations. Besides quasi_status FINISHED it can carry

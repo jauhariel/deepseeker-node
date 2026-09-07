@@ -68,6 +68,24 @@ export function computeCost(model, inTokens, outTokens) {
   return (inTokens / 1_000_000) * tariff.cache_miss_input + (outTokens / 1_000_000) * tariff.output_generation;
 }
 
+// Perplexity/OpenRouter-style citation fields collected from DeepSeek search
+// results: `citations` (plain URL list, which many clients render) plus
+// `search_results` (title + url detail). Returns null when there are none.
+function citationFields(meta) {
+  const results = meta?.searchResults;
+  if (!results || !results.length) return null;
+  const seen = new Set();
+  const citations = [];
+  const searchResults = [];
+  for (const r of results) {
+    if (!r.url || seen.has(r.url)) continue;
+    seen.add(r.url);
+    citations.push(r.url);
+    searchResults.push({ index: r.cite_index ?? citations.length, title: r.title || r.url, url: r.url });
+  }
+  return citations.length ? { citations, search_results: searchResults } : null;
+}
+
 // Save both the current signature and the next-turn signature (current history +
 // the assistant reply just produced) so the next request resumes this session.
 function saveSessionPair(sig, tokenId, sessionId, parentMessageId, messages, parsedTools, cleanText, model, scope) {
@@ -102,6 +120,7 @@ export async function handleChat(opts) {
   const sig = generateSignature(messages, model, scope);
   let sess = findSession(sig);
   let tokenId, sessionId, parentMessageId;
+  const meta = {}; // filled by sendMessage with search results, etc.
 
   if (sess) {
     tokenId = sess.token_id;
@@ -120,11 +139,11 @@ export async function handleChat(opts) {
             const newSessionId = await createNewChat(newTok.token);
             const prompt = buildPrompt(messages, tools || [], model, true);
             const fileIds = await extractAndUploadFiles(messages, newTok.token);
-            gen = await preflightStream(sendMessage(newSessionId, newTok.token, prompt, 0, thinking, search, model === 'instant' ? null : model, fileIds));
+            gen = await preflightStream(sendMessage(newSessionId, newTok.token, prompt, 0, thinking, search, model === 'instant' ? null : model, fileIds, meta));
             if (stream) {
               return { stream: isAnthropic
-                ? streamAnthropicResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, reqModel, 0, scope, endpoint)
-                : streamResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, 0, scope, endpoint) };
+                ? streamAnthropicResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, reqModel, 0, scope, endpoint, meta)
+                : streamResponse(gen, model, messages, newTokenId, newSessionId, sig, tools, 0, scope, endpoint, meta) };
             }
             const respText = await collectResponse(gen);
             markActive(newTokenId);
@@ -133,6 +152,7 @@ export async function handleChat(opts) {
             saveSessionPair(sig, newTokenId, newSessionId, 0, messages, parsedTools, stripped, model, scope);
             const payload = formatResponse(respText, model, messages, tools);
             logUsage({ apiKey: scope || 'unknown', endpoint, model, promptTokens: payload.usage.prompt_tokens, completionTokens: payload.usage.completion_tokens, cost: payload.usage.cost });
+            Object.assign(payload, citationFields(meta) || {});
             return { status: 200, json: payload };
           } catch (e) {
             if (_retried) {
@@ -176,12 +196,12 @@ export async function handleChat(opts) {
     const fileIds = await extractAndUploadFiles(messages, tok.token, !isFirst);
     const prompt = buildPrompt(messages, tools || [], model, isFirst);
 
-    let gen = sendMessage(sessionId, tok.token, prompt, parentMessageId, thinking, search, model === 'instant' ? null : model, fileIds);
+    let gen = sendMessage(sessionId, tok.token, prompt, parentMessageId, thinking, search, model === 'instant' ? null : model, fileIds, meta);
     gen = await preflightStream(gen);
     if (stream) {
       return { stream: isAnthropic
-        ? streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel, parentMessageId, scope, endpoint)
-        : streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId, scope, endpoint) };
+        ? streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel, parentMessageId, scope, endpoint, meta)
+        : streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId, scope, endpoint, meta) };
     }
     const respText = await collectResponse(gen);
     markActive(tokenId);
@@ -191,6 +211,7 @@ export async function handleChat(opts) {
     saveSessionPair(sig, tokenId, sessionId, parentMessageId, messages, parsedTools, stripped, model, scope);
     const payload = formatResponse(respText, model, messages, tools);
     logUsage({ apiKey: scope || 'unknown', endpoint, model, promptTokens: payload.usage.prompt_tokens, completionTokens: payload.usage.completion_tokens, cost: payload.usage.cost });
+    Object.assign(payload, citationFields(meta) || {});
     return { status: 200, json: payload };
   } catch (e) {
     const code = httpCode(e);
@@ -232,7 +253,7 @@ async function* holdThinkTags(gen) {
 
 const sseData = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
 
-export async function* streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId = 0, scope = '', endpoint = 'unknown') {
+export async function* streamResponse(gen, model, messages, tokenId, sessionId, sig, tools, parentMessageId = 0, scope = '', endpoint = 'unknown', meta = null) {
   const parser = new StreamToolParser();
   let fullText = '';
   let isThinking = false;
@@ -309,9 +330,9 @@ export async function* streamResponse(gen, model, messages, tokenId, sessionId, 
             const deltaTc = { index: i, id: tc.id, type: 'function', function: { name: tc.function.name, arguments: tc.function.arguments } };
             yield sseData({ choices: [{ delta: { tool_calls: [deltaTc] } }] });
           }
-          yield sseData({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+          yield sseData({ choices: [{ delta: {}, finish_reason: 'tool_calls' }], ...(citationFields(meta) || {}) });
         } else {
-          yield sseData({ choices: [{ delta: {}, finish_reason: 'stop' }] });
+          yield sseData({ choices: [{ delta: {}, finish_reason: 'stop' }], ...(citationFields(meta) || {}) });
         }
         yield 'data: [DONE]\n\n';
       } catch { /* client disconnected mid-flush */ }
@@ -319,7 +340,7 @@ export async function* streamResponse(gen, model, messages, tokenId, sessionId, 
   }
 }
 
-export async function* streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel = null, parentMessageId = 0, scope = '', endpoint = 'unknown') {
+export async function* streamAnthropicResponse(gen, model, messages, tokenId, sessionId, sig, tools, reqModel = null, parentMessageId = 0, scope = '', endpoint = 'unknown', meta = null) {
   const msgId = `msg_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
   const inTokens = countTokens(messagesText(messages));
   const modelName = reqModel || model;
@@ -430,9 +451,9 @@ export async function* streamAnthropicResponse(gen, model, messages, tokenId, se
         tailEvents += `event: content_block_stop\ndata: ${JSON.stringify({ type: 'content_block_stop', index: idx })}\n\n`;
         idx++;
       }
-      tailEvents += `event: message_delta\ndata: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: outTokens } })}\n\n`;
+      tailEvents += `event: message_delta\ndata: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: outTokens }, ...(citationFields(meta) || {}) })}\n\n`;
     } else {
-      tailEvents += `event: message_delta\ndata: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: outTokens } })}\n\n`;
+      tailEvents += `event: message_delta\ndata: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: outTokens }, ...(citationFields(meta) || {}) })}\n\n`;
     }
     tailEvents += `event: message_stop\ndata: ${JSON.stringify({ type: 'message_stop' })}\n\n`;
 
@@ -517,5 +538,6 @@ export function formatAnthropicResponse(result, model) {
       input_tokens: usage.prompt_tokens ?? 0,
       output_tokens: usage.completion_tokens ?? 0,
     },
+    ...(result.citations ? { citations: result.citations, search_results: result.search_results } : {}),
   };
 }
