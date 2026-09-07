@@ -141,6 +141,15 @@ function resolveModel(modelRaw) {
   return 'expert';
 }
 
+// Model ids like "expert-thinking" / "deepseek-reasoner" explicitly ask for
+// reasoning — the OpenRouter-style way to expose a thinking toggle through
+// the model picker of clients that have no native reasoning switch.
+function modelRequestsThinking(modelRaw) {
+  if (!modelRaw || typeof modelRaw !== 'string') return false;
+  const m = modelRaw.toLowerCase();
+  return m.includes('thinking') || m.includes('reasoner') || m.includes('reasoning');
+}
+
 // Public base URL for docs/dashboard display: DEEPSEEKER_PUBLIC_URL if set,
 // otherwise derived from the request (respects X-Forwarded-Proto behind a proxy).
 function baseUrl(req) {
@@ -173,7 +182,7 @@ app.post('/v1/chat/completions', async (req, reply) => {
   const result = await handleChat({
     messages,
     model,
-    thinking: FORCE_THINKING || isThinkingEnabled(body, req),
+    thinking: FORCE_THINKING || isThinkingEnabled(body, req) || modelRequestsThinking(body.model),
     search: body.search ?? false,
     stream: body.stream ?? false,
     tools: body.tools ?? null,
@@ -217,7 +226,7 @@ app.post('/v1/responses', async (req, reply) => {
   const result = await handleChat({
     messages,
     model,
-    thinking: FORCE_THINKING || isThinkingEnabled(body, req),
+    thinking: FORCE_THINKING || isThinkingEnabled(body, req) || modelRequestsThinking(body.model),
     search: body.search ?? false,
     stream: body.stream ?? false,
     tools: body.tools ?? null,
@@ -371,7 +380,7 @@ const anthropicMessagesHandler = async (req, reply) => {
   const result = await handleChat({
     messages: openaiMsgs,
     model,
-    thinking: FORCE_THINKING || isThinkingEnabled(body, req),
+    thinking: FORCE_THINKING || isThinkingEnabled(body, req) || modelRequestsThinking(body.model),
     search: wantsSearch,
     stream: body.stream ?? false,
     tools: openaiTools.length ? openaiTools : null,
@@ -416,6 +425,8 @@ const listModelsHandler = async (req, reply) => {
     created_at,
     owned_by: 'deeperseeker',
     capabilities: { ...baseCapabilities, ...extra },
+    // OpenRouter-style fields some clients use to detect reasoning support.
+    supported_parameters: ['tools', 'tool_choice', 'reasoning', 'include_reasoning', 'max_tokens', 'temperature', 'stream'],
   }));
 
   const claudeAliases = baseModels.map((m) => ({
@@ -425,7 +436,16 @@ const listModelsHandler = async (req, reply) => {
     display_name: `Claude ${m.display_name}`,
   }));
 
-  const allModels = [...baseModels, ...claudeAliases];
+  // "-thinking" variants force reasoning on — an off/on switch via the model
+  // picker for clients without a native thinking toggle.
+  const thinkingVariants = baseModels.map((m) => ({
+    ...m,
+    id: `${m.id}-thinking`,
+    name: `${m.name}-thinking`,
+    display_name: `${m.display_name} Thinking`,
+  }));
+
+  const allModels = [...baseModels, ...thinkingVariants, ...claudeAliases];
   return reply.send({
     object: 'list',
     data: allModels,

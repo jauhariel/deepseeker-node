@@ -158,7 +158,7 @@ print(resp.choices[0].message.content)</pre>
             <tr><td><code>expert</code></td><td>DeepSeek V4 Pro</td><td class="num">$1.32</td><td class="num">$3.96</td></tr>
         </tbody>
     </table></div>
-    <p class="hint" style="margin-top:10px;">Aliases <code>anthropic/claude-instant</code>, <code>anthropic/claude-vision</code>, <code>anthropic/claude-expert</code> are also exposed for Claude Desktop auto-discovery. If no model is sent, requests default to <code>instant</code>.</p>
+    <p class="hint" style="margin-top:10px;">Aliases <code>anthropic/claude-instant</code>, <code>anthropic/claude-vision</code>, <code>anthropic/claude-expert</code> are also exposed for Claude Desktop auto-discovery. If no model is sent, requests default to <code>instant</code>. Suffix any model with <code>-thinking</code> (e.g. <code>expert-thinking</code>) to force reasoning on — this is the off/on switch for clients without a native thinking toggle.</p>
 </section>
 
 <section>

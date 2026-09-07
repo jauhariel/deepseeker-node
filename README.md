@@ -104,6 +104,7 @@ Resource guide: the Node process idles around ~60–100 MB RAM. Chromium only ru
   - `POST /v1/files/upload`
 - **Auth Key**: Configured in `.env` (`DEEPSEEKER_API_KEY`)
 - **Models**: `instant` (flash), `vision` (flash + vision), `expert` (pro) — also exposed as `anthropic/claude-instant`, `anthropic/claude-vision`, `anthropic/claude-expert` aliases for Claude Desktop auto-discovery. If no `model` is sent, requests default to `instant` (configurable via `DEEPSEEKER_DEFAULT_MODEL`).
+- **Thinking variants**: `instant-thinking`, `vision-thinking`, `expert-thinking` force reasoning on — an off/on switch via the model picker for clients without a native thinking toggle. (`DEEPSEEKER_FORCE_THINKING=1` forces it for every request.)
 
 Request flags (both API styles):
 
