@@ -81,6 +81,7 @@ Resource guide: the Node process idles around ~60–100 MB RAM. Chromium only ru
 | `DEEPSEEKER_MAX_TOOL_RESULT_TOKENS` | Tool-result budget for session rebuilds | `12000` |
 | `DEEPSEEKER_DISABLE_BROWSER` | `1` = never launch Chromium; run fully cookieless | unset |
 | `DEEPSEEKER_PUBLIC_URL` | Public base URL shown in docs/dashboard (auto-detected from request if unset) | unset |
+| `DEEPSEEKER_DEFAULT_MODEL` | Model used when a request omits `model` (`instant`/`vision`/`expert`) | `instant` |
 
 ## Auth Token Setup
 
@@ -101,7 +102,7 @@ Resource guide: the Node process idles around ~60–100 MB RAM. Chromium only ru
   - `POST /v1/messages` (also at `/messages`)
   - `POST /v1/files/upload`
 - **Auth Key**: Configured in `.env` (`DEEPSEEKER_API_KEY`)
-- **Models**: `instant` (flash), `vision` (flash + vision), `expert` (pro) — also exposed as `anthropic/claude-instant`, `anthropic/claude-vision`, `anthropic/claude-expert` aliases for Claude Desktop auto-discovery. If no `model` is sent, requests default to `expert`.
+- **Models**: `instant` (flash), `vision` (flash + vision), `expert` (pro) — also exposed as `anthropic/claude-instant`, `anthropic/claude-vision`, `anthropic/claude-expert` aliases for Claude Desktop auto-discovery. If no `model` is sent, requests default to `instant` (configurable via `DEEPSEEKER_DEFAULT_MODEL`).
 
 Request flags (both API styles):
 

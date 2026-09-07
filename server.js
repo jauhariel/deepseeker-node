@@ -6,7 +6,7 @@ import fastifyFormbody from '@fastify/formbody';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 
-import { API_KEY, ADMIN_USER, ADMIN_PASSWORD, HOST, PORT, BASE_DIR, DISABLE_BROWSER, PUBLIC_URL } from './src/config.js';
+import { API_KEY, ADMIN_USER, ADMIN_PASSWORD, HOST, PORT, BASE_DIR, DISABLE_BROWSER, PUBLIC_URL, DEFAULT_MODEL } from './src/config.js';
 import { initDb, getAuthToken, getTokens, getToken, pickToken, addToken, deleteToken,
   addApiKey, listApiKeys, deleteApiKey, isApiKeyValid, usageStats, recentUsage } from './src/db.js';
 import { uploadFile, getFileContent, cookiesValidOnDisk } from './src/deepseek.js';
@@ -134,7 +134,7 @@ function isThinkingEnabled(body, req) {
 }
 
 function resolveModel(modelRaw) {
-  if (!modelRaw || typeof modelRaw !== 'string') return 'expert';
+  if (!modelRaw || typeof modelRaw !== 'string') return DEFAULT_MODEL;
   const m = modelRaw.toLowerCase();
   if (m.includes('instant') || m.includes('haiku') || m.includes('flash')) return 'instant';
   if (m.includes('vision')) return 'vision';
@@ -169,7 +169,7 @@ app.post('/v1/chat/completions', async (req, reply) => {
   if (!checkKey(req)) return reply.code(401).send({ error: 'Invalid API key' });
   const body = req.body || {};
   const messages = body.messages || [];
-  const model = resolveModel(body.model ?? 'expert');
+  const model = resolveModel(body.model);
   const result = await handleChat({
     messages,
     model,
@@ -186,7 +186,7 @@ app.post('/v1/chat/completions', async (req, reply) => {
 app.post('/v1/responses', async (req, reply) => {
   if (!checkKey(req)) return reply.code(401).send({ error: 'Invalid API key' });
   const body = req.body || {};
-  const model = resolveModel(body.model ?? 'expert');
+  const model = resolveModel(body.model);
   let inputs = body.input ?? [];
   if (typeof inputs === 'string' || (inputs && typeof inputs === 'object' && !Array.isArray(inputs))) {
     inputs = [inputs];
@@ -321,7 +321,7 @@ const anthropicMessagesHandler = async (req, reply) => {
   const body = req.body || {};
   const system = body.system ?? '';
   const messages = body.messages || [];
-  const model = resolveModel(body.model ?? 'expert');
+  const model = resolveModel(body.model);
   const tools = body.tools || [];
 
   const openaiMsgs = [];

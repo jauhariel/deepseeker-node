@@ -153,12 +153,12 @@ print(resp.choices[0].message.content)</pre>
             <tr><th>Model</th><th>Tier</th><th>Input / 1M tokens</th><th>Output / 1M tokens</th></tr>
         </thead>
         <tbody>
-            <tr><td><code>instant</code></td><td>DeepSeek V4 Flash</td><td class="num">$0.44</td><td class="num">$1.32</td></tr>
+            <tr><td><code>instant</code></td><td>DeepSeek V4 Flash (default)</td><td class="num">$0.44</td><td class="num">$1.32</td></tr>
             <tr><td><code>vision</code></td><td>DeepSeek V4 Flash Exp (image input)</td><td class="num">$0.44</td><td class="num">$1.32</td></tr>
-            <tr><td><code>expert</code></td><td>DeepSeek V4 Pro (default)</td><td class="num">$1.32</td><td class="num">$3.96</td></tr>
+            <tr><td><code>expert</code></td><td>DeepSeek V4 Pro</td><td class="num">$1.32</td><td class="num">$3.96</td></tr>
         </tbody>
     </table></div>
-    <p class="hint" style="margin-top:10px;">Aliases <code>anthropic/claude-instant</code>, <code>anthropic/claude-vision</code>, <code>anthropic/claude-expert</code> are also exposed for Claude Desktop auto-discovery. If no model is sent, requests default to <code>expert</code>.</p>
+    <p class="hint" style="margin-top:10px;">Aliases <code>anthropic/claude-instant</code>, <code>anthropic/claude-vision</code>, <code>anthropic/claude-expert</code> are also exposed for Claude Desktop auto-discovery. If no model is sent, requests default to <code>instant</code>.</p>
 </section>
 
 <section>
@@ -365,7 +365,7 @@ export function dashboardPage({ tokens, apiKeys, stats, recent, masterKey, baseU
 <section>
     <h2>API</h2>
     <p>OpenAI base URL: <code>${escapeHtml(baseUrl)}/v1</code> &nbsp;·&nbsp; Anthropic base URL: <code>${escapeHtml(baseUrl)}</code></p>
-    <p>Models: <code>instant</code>, <code>vision</code>, <code>expert</code> (default when omitted: <code>expert</code>)</p>
+    <p>Models: <code>instant</code>, <code>vision</code>, <code>expert</code> (default when omitted: <code>instant</code>)</p>
 </section>`;
 
   const content = `

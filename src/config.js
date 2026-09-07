@@ -29,3 +29,7 @@ export const DISABLE_BROWSER = /^(1|true|yes)$/i.test(process.env.DEEPSEEKER_DIS
 // Public-facing base URL shown in docs/dashboard (e.g. https://api.example.com).
 // When unset, pages derive it from the incoming request's Host header.
 export const PUBLIC_URL = (process.env.DEEPSEEKER_PUBLIC_URL || '').replace(/\/+$/, '');
+
+// Model used when a request does not specify one.
+const _defaultModel = (process.env.DEEPSEEKER_DEFAULT_MODEL || 'instant').toLowerCase();
+export const DEFAULT_MODEL = ['instant', 'vision', 'expert'].includes(_defaultModel) ? _defaultModel : 'instant';
