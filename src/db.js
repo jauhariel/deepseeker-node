@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { DB_FILE } from './config.js';
+import { DB_FILE, MAX_SESSIONS, PRUNE_EVERY } from './config.js';
 
 const db = new Database(DB_FILE, { timeout: 30000 });
 db.pragma('journal_mode = WAL');
@@ -43,6 +43,11 @@ export function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_log(ts);
   `);
+  try {
+    pruneSessions();
+  } catch (e) {
+    console.warn('[db] startup session pruning failed (non-fatal):', e.message || e);
+  }
 }
 
 export function getAuthToken() {
@@ -84,6 +89,7 @@ export function pickToken() {
 }
 
 export function markLimited(tokenId) {
+  console.warn(`[db] token #${tokenId} marked RATE_LIMITED`);
   db.prepare('UPDATE tokens SET status = ? WHERE id = ?').run('RATE_LIMITED', tokenId);
 }
 
@@ -97,9 +103,35 @@ export function findSession(sig) {
   return { token_id: row.token_id, session_id: row.deepseek_session_id, parent_message_id: row.parent_message_id };
 }
 
+// Every request stores 2 session rows and nothing removed them, so the DB
+// grew unbounded — on volume-limited deployments a full disk freezes all
+// requests. Prune keeps the newest MAX_SESSIONS rows (rowid = insertion order).
+let saveCounter = 0;
+
+export function pruneSessions() {
+  const deleted = db.prepare(
+    'DELETE FROM sessions WHERE rowid NOT IN (SELECT rowid FROM sessions ORDER BY rowid DESC LIMIT ?)'
+  ).run(MAX_SESSIONS).changes;
+  const deletedMap = db.prepare(
+    "DELETE FROM session_map WHERE created_at < datetime('now', '-7 days')"
+  ).run().changes;
+  if (deleted || deletedMap) {
+    console.info(`[db] pruned ${deleted} session signature(s) and ${deletedMap} stale session_map row(s)`);
+  }
+}
+
 export function saveSession(sig, tokenId, sessionId, parentMessageId = 0) {
   db.prepare(`INSERT OR REPLACE INTO sessions (signature, token_id, deepseek_session_id, parent_message_id)
               VALUES (?, ?, ?, ?)`).run(sig, tokenId, sessionId, parentMessageId);
+  saveCounter++;
+  if (saveCounter >= PRUNE_EVERY) {
+    saveCounter = 0;
+    try {
+      pruneSessions();
+    } catch (e) {
+      console.warn('[db] session pruning failed (non-fatal):', e.message || e);
+    }
+  }
 }
 
 export function deleteSession(sig) {

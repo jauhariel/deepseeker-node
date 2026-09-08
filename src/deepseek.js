@@ -1,8 +1,33 @@
 import fs from 'node:fs';
-import { COOKIE_FILE, WASM_PATH, DISABLE_BROWSER } from './config.js';
+import path from 'node:path';
+import { COOKIE_FILE, WASM_PATH, DISABLE_BROWSER, DB_FILE, COOKIE_ATTEMPTS, COOKIE_TIMEOUT, COOKIE_COOLDOWN } from './config.js';
 import { Mutex, sleep, guessMimeType } from './util.js';
 
 const DS_BASE = 'https://chat.deepseek.com';
+
+// Raised when the DeepSeek WAF cookie file cannot be produced. The "HTTP 503:"
+// prefix lets the API error plumbing map it to 503 (upstream unreachable)
+// instead of a generic 502.
+export class CookieGenerationError extends Error {}
+
+// Resolve where the cookie file actually lives: DEEPSEEKER_COOKIE_PATH env >
+// the target of a legacy Docker symlink > next to the real DB file > default.
+// Writes go to the RESOLVED path so an atomic rename never destroys a symlink
+// bridging the file into a persistent volume (upstream cookie-stability fix).
+export function cookieFilePath() {
+  if (process.env.DEEPSEEKER_COOKIE_PATH) return process.env.DEEPSEEKER_COOKIE_PATH;
+  try {
+    if (fs.existsSync(COOKIE_FILE) && fs.lstatSync(COOKIE_FILE).isSymbolicLink()) {
+      const target = fs.realpathSync(COOKIE_FILE);
+      if (target) return target;
+    }
+  } catch {
+    // fall through
+  }
+  const dbDir = path.dirname(path.resolve(DB_FILE));
+  if (dbDir && dbDir !== process.cwd()) return path.join(dbDir, 'aws_cookies_deepseek.json');
+  return COOKIE_FILE;
+}
 
 const TZ_OFFSET = String(Math.trunc(-new Date().getTimezoneOffset() * 60));
 
@@ -38,8 +63,9 @@ function cookieHeader(cookieObj) {
 
 function readCookieFile() {
   try {
-    if (fs.existsSync(COOKIE_FILE)) {
-      const cookies = JSON.parse(fs.readFileSync(COOKIE_FILE, 'utf-8'));
+    const p = cookieFilePath();
+    if (fs.existsSync(p)) {
+      const cookies = JSON.parse(fs.readFileSync(p, 'utf-8'));
       if (cookies.expiry != null && cookies.expiry > Date.now() / 1000) {
         return cookies.cookie;
       }
@@ -50,6 +76,16 @@ function readCookieFile() {
   return null;
 }
 
+// Last-resort fallback: cookies even if expired (upstream may still accept them).
+function readStaleCookieFile() {
+  try {
+    const c = JSON.parse(fs.readFileSync(cookieFilePath(), 'utf-8'));
+    return c.cookie || null;
+  } catch {
+    return null;
+  }
+}
+
 // Cached WAF cookies only — never launches a browser. Returns null when there is
 // no valid cookie file; requests are then sent cookieless (DeepSeek's API
 // currently accepts that; the browser path below is only a fallback).
@@ -58,17 +94,64 @@ export function getCachedCookies() {
 }
 
 const cookieMutex = new Mutex();
+// Fail-fast state: after a failed regeneration cycle, requests error in
+// milliseconds for COOKIE_COOLDOWN instead of queueing behind repeated
+// Chromium launches (the "whole server freezes" failure mode upstream fixed).
+const cookieFail = { until: 0, error: '' };
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
+  ]);
+}
 
 export async function regenerateCookies() {
   if (DISABLE_BROWSER) {
-    throw new Error('DeepSeek returned a WAF challenge (HTTP 403) and DEEPSEEKER_DISABLE_BROWSER=1 prevents cookie regeneration. Unset it, or place a valid aws_cookies_deepseek.json next to server.js.');
+    throw new CookieGenerationError('HTTP 503: DeepSeek returned a WAF challenge (HTTP 403) and DEEPSEEKER_DISABLE_BROWSER=1 prevents cookie regeneration. Unset it, or place a valid aws_cookies_deepseek.json next to server.js.');
+  }
+  const cooldownError = () => new CookieGenerationError(cookieFail.error + ' (cooling down; will retry automatically — try again shortly)');
+
+  if (Date.now() < cookieFail.until) {
+    const stale = readStaleCookieFile();
+    if (stale) return stale;
+    throw cooldownError();
   }
   return cookieMutex.run(async () => {
     const recheck = readCookieFile();
     if (recheck) return recheck;
-    await generateCookies();
-    const cookies = JSON.parse(fs.readFileSync(COOKIE_FILE, 'utf-8'));
-    return cookies.cookie;
+    if (Date.now() < cookieFail.until) {
+      const stale = readStaleCookieFile();
+      if (stale) return stale;
+      throw cooldownError();
+    }
+    let lastErr = null;
+    for (let attempt = 1; attempt <= COOKIE_ATTEMPTS; attempt++) {
+      try {
+        console.info(`[cookies] generating DeepSeek cookies (attempt ${attempt}/${COOKIE_ATTEMPTS})...`);
+        await withTimeout(generateCookies(), COOKIE_TIMEOUT, 'cookie generation');
+        const cookies = readCookieFile();
+        if (cookies) {
+          cookieFail.until = 0;
+          cookieFail.error = '';
+          return cookies;
+        }
+        lastErr = new Error('cookie file missing/invalid after generation');
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[cookies] generation attempt ${attempt}/${COOKIE_ATTEMPTS} failed:`, e.message || e);
+      }
+      if (attempt < COOKIE_ATTEMPTS) await sleep(Math.min(5000 * attempt, 10000));
+    }
+    cookieFail.until = Date.now() + COOKIE_COOLDOWN;
+    cookieFail.error = `HTTP 503: Could not generate DeepSeek cookies: ${lastErr?.message || lastErr}`;
+    console.error('[cookies]', cookieFail.error);
+    const stale = readStaleCookieFile();
+    if (stale) {
+      console.warn('[cookies] serving STALE cookies after generation failure (upstream may reject them)');
+      return stale;
+    }
+    throw new CookieGenerationError(cookieFail.error);
   });
 }
 
@@ -86,11 +169,9 @@ async function dsFetch(url, { method = 'GET', headers = {}, body, timeoutMs = 30
   };
   let resp = await fetch(url, makeOpts());
   if (resp.status === 403) {
-    try {
-      await regenerateCookies();
-    } catch {
-      return resp; // browser unavailable/disabled — surface the original 403
-    }
+    // CookieGenerationError propagates here so the API layer answers 503 with
+    // the root cause instead of a bare upstream 403.
+    await regenerateCookies();
     resp = await fetch(url, makeOpts());
   }
   return resp;
@@ -115,8 +196,8 @@ async function generateCookies() {
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await page.goto(DS_BASE + '/', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('body');
+    await page.goto(DS_BASE + '/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('body', { timeout: 30000 });
     try {
       await page.waitForURL('**/sign_in*', { timeout: 30000 });
     } catch {
@@ -134,14 +215,20 @@ async function generateCookies() {
   }
   finalCookies['ds_cookie_preference'] = '%257B%2522level%2522%253A%2522all%2522%257D';
   if (!expiry || expiry < 0) expiry = Date.now() / 1000 + 1800;
-  const tmpPath = COOKIE_FILE + '.tmp';
+  // Write via the RESOLVED path (see cookieFilePath): an atomic rename onto a
+  // symlink path would replace the symlink itself and escape the data volume.
+  const target = cookieFilePath();
+  const targetDir = path.dirname(path.resolve(target));
+  fs.mkdirSync(targetDir, { recursive: true });
+  const tmpPath = path.join(targetDir, path.basename(target) + '.tmp');
   fs.writeFileSync(tmpPath, JSON.stringify({ cookie: finalCookies, expiry }));
-  fs.renameSync(tmpPath, COOKIE_FILE);
+  fs.renameSync(tmpPath, target);
+  console.info(`[cookies] saved to ${target} (expires ${new Date(expiry * 1000).toISOString()})`);
 }
 
 export function cookiesValidOnDisk() {
   try {
-    const c = JSON.parse(fs.readFileSync(COOKIE_FILE, 'utf-8'));
+    const c = JSON.parse(fs.readFileSync(cookieFilePath(), 'utf-8'));
     return Boolean(c.expiry && c.expiry > Date.now() / 1000);
   } catch {
     return false;
@@ -301,6 +388,7 @@ export async function* sendMessage(chatId, authToken, message, parentMessageId, 
   });
   if (resp.status !== 200) {
     const errorText = await resp.text();
+    console.warn(`[deepseek] completion HTTP ${resp.status} for chat ${chatId}: ${errorText.slice(0, 300)}`);
     throw new Error(`HTTP ${resp.status}: ${errorText}`);
   }
 

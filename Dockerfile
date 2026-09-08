@@ -16,11 +16,16 @@ RUN npx playwright install chromium --with-deps || npx playwright install chromi
 
 COPY . .
 
-RUN mkdir -p /app/data && \
-    ln -sf /app/data/deeperseeker.db /app/deeperseeker.db && \
-    ln -sf /app/data/aws_cookies_deepseek.json /app/aws_cookies_deepseek.json
+RUN mkdir -p /app/data
 
 EXPOSE 4000
+
+# Persist both state files DIRECTLY in the mounted volume (/app/data). A
+# symlink bridge breaks: an atomic rename onto the cookie path does not follow
+# symlinks and would write into the container layer instead, so cookies would
+# be lost on every container recreation. Explicit env paths avoid symlinks.
+ENV DB_PATH=/app/data/deeperseeker.db
+ENV DEEPSEEKER_COOKIE_PATH=/app/data/aws_cookies_deepseek.json
 
 ENV HOST=0.0.0.0
 

@@ -18,9 +18,17 @@ export const MAX_HISTORY_TOKENS = parseInt(process.env.DEEPSEEKER_MAX_HISTORY_TO
 export const MAX_TOOL_RESULTS_TOKENS = parseInt(process.env.DEEPSEEKER_MAX_TOOL_RESULT_TOKENS || '12000', 10);
 
 export const DEEPSEEK_BASE = 'https://chat.deepseek.com';
-export const COOKIE_FILE = path.join(BASE_DIR, 'aws_cookies_deepseek.json');
+export const COOKIE_FILE = process.env.DEEPSEEKER_COOKIE_PATH || path.join(BASE_DIR, 'aws_cookies_deepseek.json');
 export const WASM_PATH = path.join(BASE_DIR, 'wasm', 'deepseek_pow_solver.wasm');
-export const DB_FILE = path.join(BASE_DIR, 'deeperseeker.db');
+export const DB_FILE = process.env.DB_PATH || path.join(BASE_DIR, 'deeperseeker.db');
+
+// Stability tunables (ported from upstream cookie-stability fixes).
+export const COOKIE_ATTEMPTS = parseInt(process.env.DEEPSEEKER_COOKIE_ATTEMPTS || '2', 10);
+export const COOKIE_TIMEOUT = parseFloat(process.env.DEEPSEEKER_COOKIE_TIMEOUT || '120') * 1000;
+export const COOKIE_COOLDOWN = parseFloat(process.env.DEEPSEEKER_COOKIE_COOLDOWN || '20') * 1000;
+export const MAX_SIG_LOCKS = parseInt(process.env.DEEPSEEKER_MAX_SIG_LOCKS || '4096', 10);
+export const MAX_SESSIONS = parseInt(process.env.DEEPSEEKER_MAX_SESSIONS || '20000', 10);
+export const PRUNE_EVERY = parseInt(process.env.DEEPSEEKER_PRUNE_EVERY || '500', 10);
 
 // When set (1/true/yes), never launch Chromium for WAF cookies — requests go
 // cookieless and a WAF challenge becomes a hard error instead of a browser launch.

@@ -30,14 +30,23 @@ export function countTokens(text) {
 export class Mutex {
   constructor() {
     this._tail = Promise.resolve();
+    this._active = 0;
+  }
+  get busy() {
+    return this._active > 0;
   }
   async run(fn) {
-    const result = this._tail.then(fn, fn);
+    this._active++;
+    const result = this._tail.then(() => fn());
     this._tail = result.then(
       () => undefined,
       () => undefined
     );
-    return result;
+    try {
+      return await result;
+    } finally {
+      this._active--;
+    }
   }
 }
 

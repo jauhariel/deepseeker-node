@@ -7,6 +7,7 @@ import { createNewChat, sendMessage } from './deepseek.js';
 import { buildPrompt, extractAndUploadFiles, generateSignature } from './prompt.js';
 import { parseTools, StreamToolParser } from './tools.js';
 import { countTokens, Mutex } from './util.js';
+import { MAX_SIG_LOCKS } from './config.js';
 
 class HttpError extends Error {}
 
@@ -99,9 +100,19 @@ function saveSessionPair(sig, tokenId, sessionId, parentMessageId, messages, par
   saveSession(nextSig, tokenId, sessionId, nextParent(parentMessageId));
 }
 
+// One mutex per conversation signature, used to serialize first-time session
+// creation. Signatures are unique per message prefix, so without a cap this
+// map grows forever — after many chats it becomes a real memory leak.
+// When the cap is hit, the oldest half of currently-idle entries is evicted
+// (worst case: an extra benign session re-creation).
 const sigLocks = new Map();
 
 function lockFor(sig) {
+  if (sigLocks.size >= MAX_SIG_LOCKS && !sigLocks.has(sig)) {
+    const chunk = [...sigLocks.entries()].slice(0, Math.floor(MAX_SIG_LOCKS / 2) + 1);
+    const evictable = chunk.filter(([, lock]) => !lock.busy).map(([k]) => k);
+    for (const k of evictable) sigLocks.delete(k);
+  }
   let lock = sigLocks.get(sig);
   if (!lock) {
     lock = new Mutex();
